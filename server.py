@@ -22,9 +22,9 @@ class WebServer(BaseHTTPRequestHandler):
         self.end_headers()
         for pc in dataRecv:
             data = dataRecv[pc].split("~")[1].split(",")
-            self.wfile.write(bytes(f'<hr>{pc}<br><br>CPU Physical/Logical Cores: {data[1]}/{data[0]}<br>Current/Max Frequency: {data[2]}/{data[3]}<br>', "utf-8"))
+            self.wfile.write(bytes(f'<hr>{pc}<br><br>CPU Physical/Logical Cores: {data[1]}/{data[0]}<br>Current/Max Frequency: {data[2]}MHz / {data[3]}MHz<br>', "utf-8"))
             for i in range(4, int(data[0]) + 4):
-                self.wfile.write(bytes(f'Core {str(i - 3)} Usage: {data[i]}<br>', "utf-8"))
+                self.wfile.write(bytes(f'Core {str(i - 3)} Usage: {data[i]}%<br>', "utf-8"))
             self.wfile.write(bytes(f'<br>Total RAM: {round(int(data[4 + int(data[0])]) / 1073741824, 2)}GB<br>Available RAM: {round(int(data[5 + int(data[0])]) / 1073741824, 2)}GB<br>Used RAM: {round(int(data[6 + int(data[0])]) / 1073741824, 2)}GB<br>', "utf-8"))
             self.wfile.write(bytes(f'<br>Number of Disks: {data[7 + int(data[0])]}<br>', "utf-8"))
             
@@ -40,11 +40,13 @@ class WebServer(BaseHTTPRequestHandler):
             for d in range(numDisk):
                 for i in range(startofDisk + (numDisk*3) + (d*2), startofDisk + (numDisk*4) + (d*2)):
                     print(f'{startofDisk + d} {data[i]}')
-                    
-            self.wfile.write(bytes(str(disks) + '<br>', "utf-8"))
             
+            for d in disks:
+                self.wfile.write(bytes(f'{disks[d]["name"]} {str(round(int(disks[d]["used"]) / 1073741824, 1))}GB / {str(round(int(disks[d]["size"]) / 1073741824, 1))}GB' + '<br>', "utf-8"))
+                
             afterDisk = startofDisk + (numDisk * (3 + numDisk))
-            self.wfile.write(bytes(base64.b64decode(data[afterDisk].encode('ascii')).decode('ascii') + '<br>', "utf-8"))
+            
+            self.wfile.write(bytes('<br>Hostname: ' + base64.b64decode(data[afterDisk].encode('ascii')).decode('ascii') + '<br>', "utf-8"))
             
         self.wfile.write(bytes("<script>setTimeout(function(){window.location.reload(1);}, 500);</script>", "utf-8"))
 
