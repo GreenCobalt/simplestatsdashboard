@@ -1,4 +1,4 @@
-import socket, string, os, shelve, random, time, csv, socketserver, http.server
+import socket, string, os, shelve, random, time, csv, socketserver, http.server, base64
 from _thread import *
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -15,16 +15,38 @@ dataRecv = {}
 # --------------
 class WebServer(BaseHTTPRequestHandler):
     def do_GET(self):
+        disks = {}
+        
         self.send_response(200)
         self.send_header("Content-type", "text/html")
         self.end_headers()
         for pc in dataRecv:
-            data = dataRecv[pc].split(":")[1].split(",")
-            self.wfile.write(bytes(f'{pc}<br><br>CPU Physical/Logical Cores: {data[1]}/{data[0]}<br>Current/Max Frequency: {data[2]}/{data[3]}<br>', "utf-8"))
+            data = dataRecv[pc].split("~")[1].split(",")
+            self.wfile.write(bytes(f'<hr>{pc}<br><br>CPU Physical/Logical Cores: {data[1]}/{data[0]}<br>Current/Max Frequency: {data[2]}/{data[3]}<br>', "utf-8"))
             for i in range(4, int(data[0]) + 4):
                 self.wfile.write(bytes(f'Core {str(i - 3)} Usage: {data[i]}<br>', "utf-8"))
             self.wfile.write(bytes(f'<br>Total RAM: {round(int(data[4 + int(data[0])]) / 1073741824, 2)}GB<br>Available RAM: {round(int(data[5 + int(data[0])]) / 1073741824, 2)}GB<br>Used RAM: {round(int(data[6 + int(data[0])]) / 1073741824, 2)}GB<br>', "utf-8"))
-        self.wfile.write(bytes("<script>setTimeout(function(){window.location.reload(1);}, 250);</script>", "utf-8"))
+            self.wfile.write(bytes(f'<br>Number of Disks: {data[7 + int(data[0])]}<br>', "utf-8"))
+            
+            startofDisk = 8 + int(data[0])
+            numDisk = int(data[7 + int(data[0])])
+            for i in range(startofDisk, startofDisk + numDisk):
+                disks[i] = {}
+                disks[i]['name'] = data[i]
+            for i in range(startofDisk + numDisk, startofDisk + (numDisk*2)):
+                disks[i - numDisk]['size'] = int(data[i])
+            for i in range(startofDisk + (numDisk*2), startofDisk + (numDisk*3)):
+                disks[i - (numDisk*2)]['used'] = int(data[i])
+            for d in range(numDisk):
+                for i in range(startofDisk + (numDisk*3) + (d*2), startofDisk + (numDisk*4) + (d*2)):
+                    print(f'{startofDisk + d} {data[i]}')
+                    
+            self.wfile.write(bytes(str(disks) + '<br>', "utf-8"))
+            
+            afterDisk = startofDisk + (numDisk * (3 + numDisk))
+            self.wfile.write(bytes(base64.b64decode(data[afterDisk].encode('ascii')).decode('ascii') + '<br>', "utf-8"))
+            
+        self.wfile.write(bytes("<script>setTimeout(function(){window.location.reload(1);}, 500);</script>", "utf-8"))
 
 def webserver(port):
     webServer = HTTPServer(("", port), WebServer)
@@ -55,7 +77,7 @@ def threaded_client(connection):
     connection.send(str.encode('ack'))
     tag = None
     
-    data = connection.recv(512).decode('utf-8').replace('-', '')
+    data = connection.recv(512).decode('utf-8').replace('`', '')
     
     if data == 'needTag':
         newTag = computer()
@@ -70,7 +92,7 @@ def threaded_client(connection):
             reply = data
             tag = data
         
-    connection.sendall(str.encode(reply) + str.encode(((512 - len(reply)) * '-')))
+    connection.sendall(str.encode(reply) + str.encode(((512 - len(reply)) * '`')))
     
     if (reply == 'INVALIDTAG'):
         exit()
@@ -78,9 +100,10 @@ def threaded_client(connection):
     print("Connection recieved and verified from tag " + tag)
     
     while True:
-        data = connection.recv(512).decode('utf-8').replace('-', '')
+        data = connection.recv(512).decode('utf-8').replace('`', '')
         if data == 'CLOSECONN':
             print("Got close request from tag " + tag + ", closing connection.")
+            del dataRecv[tag]
             connection.close()
             exit()
         else:

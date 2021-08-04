@@ -1,4 +1,4 @@
-import socket, string, os, shelve, time, psutil
+import socket, string, os, shelve, time, psutil, base64
 
 ClientSocket = socket.socket()
 host = '192.168.1.200'
@@ -21,12 +21,12 @@ with shelve.open('feederDB') as db:
     res = ClientSocket.recv(512)
     if res.decode('utf-8') == 'ack':
         res = str.encode(tag) if hasTag else str.encode('needTag')
-        ClientSocket.send(res + str.encode(((512 - len(res)) * '-')))
+        ClientSocket.send(res + str.encode(((512 - len(res)) * '`')))
     else:
         print("Invalid connection reply from server.")
         exit()
     res = ClientSocket.recv(512)
-    newTag = res.decode('utf-8').replace('-', '')
+    newTag = res.decode('utf-8').replace('`', '')
     if not hasTag:
         print("Recieved new tag: " + newTag)
         db['tag'] = newTag
@@ -46,28 +46,36 @@ with shelve.open('feederDB') as db:
 
 try:
     delayBtwnSend = 1
-    while True:
-        stTime = time.time()
-        psHdd = psutil.disk_io_counters(perdisk=True)
-        hddStats = [[d[2], d[3]] for d in psHdd.values()]
-        if not 'oldhddStats' in globals():
+    try:
+        while True:
+            stTime = time.time()
+            psHdd = psutil.disk_io_counters(perdisk=True)
+            hddStats = [[d[2], d[3]] for d in psHdd.values()]
+            if not 'oldhddStats' in globals():
+                oldhddStats = hddStats
+            
+            mem = psutil.virtual_memory()
+            disk = psutil.disk_partitions()
+            
+            newHddStats = [[hddStats[i][0] - oldhddStats[i][0], hddStats[i][1] - oldhddStats[i][1]] for i in range(len(psHdd))]
+            
+            message = f'{tag}~{psutil.cpu_count()},{psutil.cpu_count(logical=False)},{psutil.cpu_freq().current},{psutil.cpu_freq().max},{str(psutil.cpu_percent(interval=delayBtwnSend,percpu=True)).replace("[", "").replace("]", "")},{mem.total},{mem.available},{mem.used},\
+    {len(disk)},' + str([d.mountpoint for d in disk]).replace("[", "").replace("]", "").replace("'", "").replace("\\\\", "\\").replace(" ", "") + ',' + str([psutil.disk_usage(d.mountpoint).total for d in disk]).replace("[", "").replace("]", "").replace("'", "").replace(" ", "")\
+     + ',' + str([psutil.disk_usage(d.mountpoint).used for d in disk]).replace("[", "").replace("]", "").replace("'", "").replace(" ", "") + ',' + str(newHddStats).replace("[", "").replace("]", "").replace("'", "").replace(" ", "") + f",{base64.b64encode(socket.gethostname().encode('ascii')).decode('ascii')}"
+            res = str.encode(message)
+            print(f"Sending (len {str(len(res))}): '" + message)
+            ClientSocket.send(res + str.encode(((512 - len(res)) * '`')))
+            
             oldhddStats = hddStats
-        
-        mem = psutil.virtual_memory()
-        disk = psutil.disk_partitions()
-        
-        message = f'{tag}:{psutil.cpu_count()},{psutil.cpu_count(logical=False)},{psutil.cpu_freq().current},{psutil.cpu_freq().max},{str(psutil.cpu_percent(interval=delayBtwnSend,percpu=True)).replace("[", "").replace("]", "")},{mem.total},{mem.available},{mem.used},\
-{len(disk)},' + str([d.mountpoint for d in disk]).replace("[", "").replace("]", "").replace("'", "").replace("\\\\", "\\").replace(" ", "") + ',' + str([psutil.disk_usage(d.mountpoint).total for d in disk]).replace("[", "").replace("]", "").replace("'", "").replace(" ", "")\
- + ',' + str([psutil.disk_usage(d.mountpoint).used for d in disk]).replace("[", "").replace("]", "").replace("'", "").replace(" ", "") + ',' + str([[hddStats[i][0] - oldhddStats[i][0], hddStats[i][1] - oldhddStats[i][1]] for i in range(len(psHdd))]).replace("[", "").replace("]", "").replace("'", "").replace(" ", "")
-        print("Sending '" + message)
-        res = str.encode(message)
-        ClientSocket.send(res + str.encode(((512 - len(res)) * '-')))
-        
-        oldhddStats = hddStats
-        
-        tookTime = time.time() - stTime
-        time.sleep(1.25 - tookTime)
+            
+            tookTime = time.time() - stTime
+            time.sleep(1.25 - tookTime)
+    except Exception as e:
+        print("EXCEPTION " + e)
+        res = str.encode("CLOSECONN")
+        ClientSocket.send(res + str.encode(((512 - len(res)) * '`')))
+        ClientSocket.close()
 except KeyboardInterrupt:
     res = str.encode("CLOSECONN")
-    ClientSocket.send(res + str.encode(((512 - len(res)) * '-')))
+    ClientSocket.send(res + str.encode(((512 - len(res)) * '`')))
     ClientSocket.close()
