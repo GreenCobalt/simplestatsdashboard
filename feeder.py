@@ -1,8 +1,11 @@
-import socket, string, os, shelve, time, psutil, base64
+import socket, string, os, shelve, time, psutil, base64, GPUtil
+from tabulate import tabulate
 
 ClientSocket = socket.socket()
 host = '192.168.1.200'
 port = 1233
+
+BASEPATH = os.path.dirname(__file__)
 
 tag = None
 
@@ -12,7 +15,7 @@ try:
 except socket.error as e:
     print(str(e))
 
-with shelve.open('feederDB') as db:
+with shelve.open(BASEPATH + '/feeder.db') as db:
     hasTag = 'tag' in db
     tag = db['tag'] if hasTag else None
     
@@ -65,6 +68,10 @@ try:
             res = str.encode(message)
             print(f"Sending (len {str(len(res))}): '" + message)
             ClientSocket.send(res + str.encode(((512 - len(res)) * '`')))
+            
+            #gpus = GPUtil.getGPUs()
+            #for gpu in gpus:
+            #    print(gpu.name)
             
             oldhddStats = hddStats
             

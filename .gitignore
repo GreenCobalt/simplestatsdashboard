@@ -1,6 +1,6 @@
-computer.bak
-computer.dat
-computer.dir
-feederDB.bak
-feederDB.dat
-feederDB.dir
+server.db.bak
+server.db.dat
+server.db.dir
+feeder.db.bak
+feeder.db.dat
+feeder.db.dir

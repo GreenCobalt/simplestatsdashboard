@@ -8,6 +8,8 @@ port = 1233
 wsport = 8080
 ThreadCount = 0
 
+BASEPATH = os.path.dirname(__file__)
+
 dataRecv = {}
 
 # --------------
@@ -15,40 +17,47 @@ dataRecv = {}
 # --------------
 class WebServer(BaseHTTPRequestHandler):
     def do_GET(self):
-        disks = {}
         
         self.send_response(200)
         self.send_header("Content-type", "text/html")
         self.end_headers()
-        for pc in dataRecv:
-            data = dataRecv[pc].split("~")[1].split(",")
-            self.wfile.write(bytes(f'<hr>{pc}<br><br>CPU Physical/Logical Cores: {data[1]}/{data[0]}<br>Current/Max Frequency: {data[2]}MHz / {data[3]}MHz<br>', "utf-8"))
-            for i in range(4, int(data[0]) + 4):
-                self.wfile.write(bytes(f'Core {str(i - 3)} Usage: {data[i]}%<br>', "utf-8"))
-            self.wfile.write(bytes(f'<br>Total RAM: {round(int(data[4 + int(data[0])]) / 1073741824, 2)}GB<br>Available RAM: {round(int(data[5 + int(data[0])]) / 1073741824, 2)}GB<br>Used RAM: {round(int(data[6 + int(data[0])]) / 1073741824, 2)}GB<br>', "utf-8"))
-            self.wfile.write(bytes(f'<br>Number of Disks: {data[7 + int(data[0])]}<br>', "utf-8"))
-            
-            startofDisk = 8 + int(data[0])
-            numDisk = int(data[7 + int(data[0])])
-            for i in range(startofDisk, startofDisk + numDisk):
-                disks[i] = {}
-                disks[i]['name'] = data[i]
-            for i in range(startofDisk + numDisk, startofDisk + (numDisk*2)):
-                disks[i - numDisk]['size'] = int(data[i])
-            for i in range(startofDisk + (numDisk*2), startofDisk + (numDisk*3)):
-                disks[i - (numDisk*2)]['used'] = int(data[i])
-            for d in range(numDisk):
-                for i in range(startofDisk + (numDisk*3) + (d*2), startofDisk + (numDisk*4) + (d*2)):
-                    print(f'{startofDisk + d} {data[i]}')
-            
-            for d in disks:
-                self.wfile.write(bytes(f'{disks[d]["name"]} {str(round(int(disks[d]["used"]) / 1073741824, 1))}GB / {str(round(int(disks[d]["size"]) / 1073741824, 1))}GB' + '<br>', "utf-8"))
+        try:
+            for pc in dataRecv:
+                disks = {}
+                data = dataRecv[pc].split("~")[1].split(",")
+                totalUsage = 0
+                self.wfile.write(bytes(f'<hr>{pc}<br><br>CPU Physical/Logical Cores: {data[1]}/{data[0]}<br>Current/Max Frequency: {data[2]}MHz / {data[3]}MHz<br>', "utf-8"))
+                for i in range(4, int(data[0]) + 4):
+                    self.wfile.write(bytes(f'Core {str(i - 3)} Usage: {data[i]}%<br>', "utf-8"))
+                    totalUsage += float(data[i])
+                self.wfile.write(bytes(f'Avg CPU Usage: {round(totalUsage / int(data[0]) + 4, 1)}%<br>', "utf-8"))
+                self.wfile.write(bytes(f'<br>Total RAM: {round(int(data[4 + int(data[0])]) / 1073741824, 2)}GB<br>Available RAM: {round(int(data[5 + int(data[0])]) / 1073741824, 2)}GB<br>Used RAM: {round(int(data[6 + int(data[0])]) / 1073741824, 2)}GB<br>', "utf-8"))
+                self.wfile.write(bytes(f'<br>Number of Disks: {data[7 + int(data[0])]}<br>', "utf-8"))
                 
-            afterDisk = startofDisk + (numDisk * (3 + numDisk))
-            
-            self.wfile.write(bytes('<br>Hostname: ' + base64.b64decode(data[afterDisk].encode('ascii')).decode('ascii') + '<br>', "utf-8"))
-            
-        self.wfile.write(bytes("<script>setTimeout(function(){window.location.reload(1);}, 500);</script>", "utf-8"))
+                startofDisk = 8 + int(data[0])
+                numDisk = int(data[7 + int(data[0])])
+                for i in range(startofDisk, startofDisk + numDisk):
+                    disks[i] = {}
+                    disks[i]['name'] = data[i]
+                for i in range(startofDisk + numDisk, startofDisk + (numDisk*2)):
+                    disks[i - numDisk]['size'] = int(data[i])
+                for i in range(startofDisk + (numDisk*2), startofDisk + (numDisk*3)):
+                    disks[i - (numDisk*2)]['used'] = int(data[i])
+                for d in range(numDisk):
+                    for i in range(startofDisk + (numDisk*3) + (d*2), startofDisk + (numDisk*4) + (d*2)):
+                        #print(f'{startofDisk + d} {data[i]}')
+                        pass
+                
+                for d in disks:
+                    self.wfile.write(bytes(f'{disks[d]["name"]} {str(round(int(disks[d]["used"]) / 1073741824, 1))}GB / {str(round(int(disks[d]["size"]) / 1073741824, 1))}GB' + '<br>', "utf-8"))
+                    
+                afterDisk = startofDisk + numDisk + (2*numDisk) + (2*numDisk)
+                
+                self.wfile.write(bytes('<br>Hostname: ' + base64.b64decode(data[afterDisk].encode('ascii')).decode('ascii') + '<br>', "utf-8"))
+                
+            self.wfile.write(bytes("<script>setTimeout(function(){window.location.reload(1);}, 1000);</script>", "utf-8"))
+        except Exception:
+            self.wfile.write(bytes("Joey is a shart.", "utf-8"))
 
 def webserver(port):
     webServer = HTTPServer(("", port), WebServer)
@@ -61,7 +70,7 @@ def tagGen(size=6, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for _ in range(size))
 
 def computer(tag = None):
-    with shelve.open('computer') as db:
+    with shelve.open(BASEPATH + '/server.db') as db:
         if tag == None:
             tag = tagGen()
             db[tag] = {'name': 'newPC'}
@@ -101,17 +110,23 @@ def threaded_client(connection):
     
     print("Connection recieved and verified from tag " + tag)
     
-    while True:
-        data = connection.recv(512).decode('utf-8').replace('`', '')
-        if data == 'CLOSECONN':
-            print("Got close request from tag " + tag + ", closing connection.")
-            del dataRecv[tag]
-            connection.close()
-            exit()
-        else:
-            #handle data
-            print("Got '" + data + "' from tag " + tag)
-            dataRecv[tag] = data
+    try:
+        while True:
+            data = connection.recv(512).decode('utf-8').replace('`', '')
+            if data == 'CLOSECONN':
+                print("Got close request from tag " + tag + ", closing connection.")
+                del dataRecv[tag]
+                connection.close()
+                exit()
+            else:
+                #handle data
+                print("Got '" + data + "' from tag " + tag)
+                dataRecv[tag] = data
+    except ConnectionResetError:
+        print("Connection to " + tag + " was force closed.")
+        del dataRecv[tag]
+        connection.close()
+        exit()
 
 
 # ----------
